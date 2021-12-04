@@ -1,0 +1,18 @@
+#pragma once
+
+namespace pkg_version
+{
+
+// Whether or not we retrieved the state of the repo.
+constexpr const bool git_retreived_state = @GIT_RETRIEVED_STATE@;
+
+// The SHA1 for the HEAD of the repo.
+constexpr const char* const git_sha1 = "@GIT_HEAD_SHA1@";
+
+// Whether or not there were uncommited changes present.
+constexpr const bool git_is_dirty = @GIT_IS_DIRTY@;
+
+// Version of project
+constexpr const char* const version = "@CURRENT_VERSION@";
+
+} // pkg_version

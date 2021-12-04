@@ -1,0 +1,148 @@
+stages:
+  - build
+  - post
+
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+  PRODUCT_NAME: "dredd"
+
+.job_template: &job_definition
+  variables:
+    PRODUCT_VERSION: $PRODUCT_NUMBER_MAJOR.$PRODUCT_NUMBER_MINOR.$PRODUCT_NUMBER_BUG.$CI_PIPELINE_ID
+    artifactory_publish: "false"
+  only:
+    - master
+    - merge_requests
+    - web
+    - /^hotfix-.*$/
+    - /^release-.*$/
+
+.job_template_rc: &job_definition_rc
+  variables:
+    PRODUCT_VERSION: $PRODUCT_NUMBER_MAJOR.$PRODUCT_NUMBER_MINOR.$PRODUCT_NUMBER_BUG.$CI_PIPELINE_ID
+    artifactory_publish: "true"
+  only:
+    - master
+    - /^hotfix-.*$/
+    - /^release-.*$/
+    - web
+
+.job_template_unix: &job_definition_unix
+  image: jfrog3-595988116.camfrog.com/camshare/centos6-gcc9:1.0.0
+  before_script:
+    - export PRODUCT_VERSION=$(python3 .ci/helper/git_tag_ver.py | grep PRODUCT_VERSION | cut -d '=' -f 2)
+    - if [ "$CI_PIPELINE_SOURCE" == "web" ]; then export DIY_CHANNEL="dirty"; else export DIY_CHANNEL="stable"; fi
+    - echo "Version - $PRODUCT_VERSION"
+    - echo "Channel - $DIY_CHANNEL"
+
+'build:full_linux':
+  image: jfrog3-595988116.camfrog.com/camshare/centos6-gcc9-toolchain:1.0.0
+  stage: build
+  tags:
+    - shared-linux-runner
+  before_script:
+    - eval `ssh-agent -s`
+    - mkdir ~/.ssh
+    - chmod 700 ~/.ssh
+    - cp $SSH_KEY_FILE ~/.ssh/id_rsa
+    - sudo chmod 600 ~/.ssh/id_rsa
+    - ssh-add ~/.ssh/id_rsa
+    - cat $SSH_CONFIG_FILE > ~/.ssh/config
+    - ssh -vT git@gitlab-595988116.camfrog.com
+    - conan remote add camshare https://jfrog2-595988116.camfrog.com/api/conan/camshare
+    - conan remote add conan-community https://api.bintray.com/conan/conan-community/conan
+    - conan remote add peerstream https://jfrog2-595988116.camfrog.com/api/conan/peerstream
+  script:
+    - conan export conan/room_modpanel_proto dredd/stable
+    - conan export conan/libx264 dredd/stable
+    - mkdir build && cd build
+    - cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_FULL_BUILD=ON
+    - cmake --build .
+  only:
+    - master
+  artifacts:
+    paths:
+      - build/bin/
+
+'build:build_deps':
+  image: jfrog3-595988116.camfrog.com/camshare/centos6-gcc9-toolchain:1.0.0
+  stage: build
+  tags:
+    - shared-linux-runner
+  before_script:
+    - export CONAN_USER_HOME=$PWD/build
+    - eval `ssh-agent -s`
+    - mkdir ~/.ssh
+    - chmod 700 ~/.ssh
+    - cp $SSH_KEY_FILE ~/.ssh/id_rsa
+    - sudo chmod 600 ~/.ssh/id_rsa
+    - ssh-add ~/.ssh/id_rsa
+    - cat $SSH_CONFIG_FILE > ~/.ssh/config
+    - ssh -vT git@gitlab-595988116.camfrog.com
+    - conan remote add camshare https://jfrog2-595988116.camfrog.com/api/conan/camshare -f
+    - conan remote add conan-community https://api.bintray.com/conan/conan-community/conan -f
+    - conan remote add peerstream https://jfrog2-595988116.camfrog.com/api/conan/peerstream -f
+  script:
+    - conan export conan/room_modpanel_proto dredd/stable
+    - conan export conan/libx264 dredd/stable
+    - mkdir -p build && cd build
+    - cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_FULL_BUILD=ON
+  only:
+    - web
+  cache:
+    key: conan
+    paths:
+      - build/.conan
+    when: 'always'
+    policy: push
+  artifacts:
+    paths:
+      - build/bin/
+
+'build:fast_linux':
+  image: jfrog3-595988116.camfrog.com/camshare/centos6-gcc9-toolchain:1.0.0
+  stage: build
+  tags:
+    - shared-linux-runner
+  before_script:
+    - export CONAN_USER_HOME=$PWD/build
+    - eval `ssh-agent -s`
+    - mkdir ~/.ssh
+    - chmod 700 ~/.ssh
+    - cp $SSH_KEY_FILE ~/.ssh/id_rsa
+    - sudo chmod 600 ~/.ssh/id_rsa
+    - ssh-add ~/.ssh/id_rsa
+    - cat $SSH_CONFIG_FILE > ~/.ssh/config
+    - ssh -vT git@gitlab-595988116.camfrog.com
+    - conan remote add camshare https://jfrog2-595988116.camfrog.com/api/conan/camshare -f
+    - conan remote add conan-community https://api.bintray.com/conan/conan-community/conan -f
+    - conan remote add peerstream https://jfrog2-595988116.camfrog.com/api/conan/peerstream -f
+  script:
+    - conan export conan/room_modpanel_proto dredd/stable
+    - conan export conan/libx264 dredd/stable
+    - mkdir -p build && cd build
+    - cmake .. -DCMAKE_BUILD_TYPE=Release -DENABLE_FULL_BUILD=OFF
+    - cmake --build .
+  cache:
+    key: conan
+    paths:
+      - build/.conan
+    when: 'always'
+    policy: pull
+  except:
+    - master
+  artifacts:
+    paths:
+      - build/bin/
+
+'post:git':
+  <<: *job_definition_rc
+  stage: post
+  tags:
+    - linux
+  only:
+    - master
+  script:
+#    - python3 .ci/helper/git_tag_ver.py push
+    - echo test
+  dependencies: []
